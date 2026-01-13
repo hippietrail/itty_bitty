@@ -1,0 +1,15 @@
+[package]
+name = "itty-bitty"
+version = "0.1.0"
+edition = "2024"
+description = "Read arbitrary-sized bitfields from files at any bit offset"
+license = "MIT"
+repository = "https://github.com/hippietrail/itty-bitty"
+keywords = ["bitfield", "binary", "cli", "hex", "bits"]
+categories = ["command-line-utilities", "parsing"]
+
+[dependencies]
+bitvec = "1.0.1"
+clap = { version = "4.5.54", features = ["derive"] }
+memmap2 = "0.9.9"
+num-bigint = "0.4.6"
