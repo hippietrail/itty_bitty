@@ -2,9 +2,95 @@ use bitvec::prelude::*;
 use clap::{Parser, ValueEnum};
 use memmap2::MmapOptions;
 use num_bigint::BigUint;
-use std::fs::File;
+use std::{fs::File, str::FromStr};
 
-#[derive(Clone, ValueEnum)]
+#[derive(Debug)]
+enum OffsetError {
+    ParseError(String),
+    InvalidBitOffset,
+}
+
+impl std::fmt::Display for OffsetError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OffsetError::ParseError(msg) => write!(f, "Invalid offset: {}", msg),
+            OffsetError::InvalidBitOffset => write!(f, "Bit offset must be 0-7"),
+        }
+    }
+}
+
+impl std::error::Error for OffsetError {}
+
+fn parse_offset(s: &str) -> Result<Offset, String> {
+    Offset::from_str(s).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone)]
+struct Offset {
+    bytes: u64,
+    bits: u32,  // 0-7
+    is_negative: bool,
+}
+
+impl Offset {
+    fn to_bits(&self) -> i64 {
+        let total_bits = (self.bytes * 8) as i64 + self.bits as i64;
+        if self.is_negative { -total_bits } else { total_bits }
+    }
+}
+
+impl FromStr for Offset {
+    type Err = OffsetError;
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (sign, s) = match s.strip_prefix('-') {
+            Some(rest) => (true, rest.trim_start()),
+            None => (false, s.trim_start()),
+        };
+        
+        // Remove thousands separators
+        let s = s.replace(&[',', '_', '\''][..], "");
+        
+        // Try to split into bytes.bits or bytes:bits
+        let (num_str, bits) = if let Some((a, b)) = s.split_once(|c| c == ':' || c == '.') {
+            let bits = b.parse::<u32>()
+                .map_err(|_| OffsetError::ParseError("Invalid bit count".into()))?;
+            if bits > 7 {
+                return Err(OffsetError::InvalidBitOffset);
+            }
+            (a, bits)
+        } else {
+            (s.as_str(), 0)
+        };
+        
+        // Parse the number part (in bits)
+        let total_bits = if num_str.starts_with("0x") || num_str.starts_with("0X") {
+            u64::from_str_radix(&num_str[2..], 16)
+        } else if num_str.starts_with('$') {
+            u64::from_str_radix(&num_str[1..], 16)
+        } else if num_str.ends_with('h') || num_str.ends_with('H') {
+            u64::from_str_radix(&num_str[..num_str.len()-1], 16)
+        } else {
+            num_str.parse::<u64>()
+        }.map_err(|e| OffsetError::ParseError(e.to_string()))?;
+        
+        // If no bits were specified via colon/dot, treat the number as bits
+        // If bits were specified, treat the number as bytes
+        let (bytes, bits) = if bits == 0 {
+            (total_bits / 8, (total_bits % 8) as u32)
+        } else {
+            (total_bits, bits)
+        };
+        
+        Ok(Offset {
+            bytes,
+            bits,
+            is_negative: sign,
+        })
+    }
+}
+
+#[derive(Clone, ValueEnum, Debug)]
 enum BitOrder {
     Msb,
     Lsb,
@@ -17,9 +103,11 @@ struct Args {
     /// Input file path
     file: String,
 
-    /// Bit offset (negative = from end of file, e.g., -32 means last 32 bits)
-    #[arg(allow_negative_numbers = true)]
-    offset: i64,
+    /// Bit/byte offset with optional bits (e.g., '123', '0x1A:3', '1_000.5')
+    /// Supports hex (0x, $, or h suffix) and thousands separators (_, ',', ' ')
+    /// Negative values count from end of file
+    #[arg(value_parser = parse_offset)]
+    offset: Offset,
 
     /// Number of bits to read
     bits: usize,
@@ -89,9 +177,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let file_bits = mmap.len() * 8;
 
+    // Calculate total bits from offset
+    let total_bits = args.offset.to_bits();
+    
     // Resolve negative offset (relative to end of file)
-    let offset: usize = if args.offset < 0 {
-        let from_end = (-args.offset) as usize;
+    let offset: usize = if total_bits < 0 {
+        let from_end = (-total_bits) as usize;
         if from_end > file_bits {
             return Err(format!(
                 "Negative offset -{} exceeds file size ({} bits)",
@@ -101,7 +192,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         file_bits - from_end
     } else {
-        args.offset as usize
+        total_bits as usize
     };
 
     let end_bit = offset + args.bits;
@@ -125,11 +216,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             file_bits
         );
         eprintln!(
-            "Reading {} bits at offset {} (byte {}, +{} bits) = -{} from end",
+            "Reading {} bits at offset {} ({} bytes, {} bits) = -{} from end",
             args.bits,
             offset,
-            offset / 8,
-            offset % 8,
+            args.offset.bytes,
+            args.offset.bits,
             from_end
         );
     }

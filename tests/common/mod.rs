@@ -144,10 +144,14 @@ pub fn create_tar_xz() -> Option<PathBuf> {
 }
 
 pub fn read_bits(file: &str, offset: i64, bits: usize, format: &str) -> String {
-    let output = Command::new(env!("CARGO_BIN_EXE_itty-bitty"))
-        .args([file, &offset.to_string(), &bits.to_string(), "-f", format])
-        .output()
-        .expect("Failed to run itty-bitty");
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_itty-bitty"));
+    cmd.arg("-f").arg(format).arg(file);
+    // Add -- before negative offsets to prevent clap from treating them as flags
+    if offset < 0 {
+        cmd.arg("--");
+    }
+    cmd.arg(offset.to_string()).arg(bits.to_string());
+    let output = cmd.output().expect("Failed to run itty-bitty");
     String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
@@ -160,10 +164,14 @@ pub fn read_bits_decimal(file: &str, offset: i64, bits: usize) -> u64 {
 }
 
 pub fn read_bits_decimal_lsb(file: &str, offset: i64, bits: usize) -> u64 {
-    let output = Command::new(env!("CARGO_BIN_EXE_itty-bitty"))
-        .args([file, &offset.to_string(), &bits.to_string(), "-f", "decimal", "-e", "lsb"])
-        .output()
-        .expect("Failed to run itty-bitty");
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_itty-bitty"));
+    cmd.arg("-e").arg("lsb").arg("-f").arg("decimal").arg(file);
+    // Add -- before negative offsets to prevent clap from treating them as flags
+    if offset < 0 {
+        cmd.arg("--");
+    }
+    cmd.arg(offset.to_string()).arg(bits.to_string());
+    let output = cmd.output().expect("Failed to run itty-bitty");
     String::from_utf8_lossy(&output.stdout)
         .trim()
         .parse()

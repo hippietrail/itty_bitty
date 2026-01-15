@@ -7,7 +7,7 @@ A CLI tool for reading arbitrary-sized bitfields from files at any bit offset.
 - **Memory-mapped file access** — handles gigantic files without loading into RAM
 - **Arbitrary bit widths** — read 1 bit or 1000 bits, no 64-bit limit
 - **Bit-level precision** — specify exact bit offsets, not just bytes
-- **Negative offsets** — read from end of file (e.g., `-32` for last 32 bits)
+- **Flexible offset syntax** — hex, decimal, byte+bit, negative offsets
 - **MSB/LSB ordering** — supports both bit orderings
 - **Multiple output formats** — hex (default), decimal, binary, ASCII
 
@@ -28,8 +28,26 @@ itty-bitty <FILE> <OFFSET> <BITS> [OPTIONS]
 | Argument | Description |
 |----------|-------------|
 | `FILE` | Input file path |
-| `OFFSET` | Bit offset (negative = from end of file) |
+| `OFFSET` | Bit/byte offset with optional bits (see below) |
 | `BITS` | Number of bits to read |
+
+### Offset Syntax
+
+The `OFFSET` argument supports several flexible formats:
+
+**Basic Formats**
+- Decimal: 1234
+- Hex: 0x4D2 or $4D2 or 4D2h
+- With thousands separators: 1_234_567 or 1,234,567
+
+**Byte + Bit Offsets**
+- Colon or dot notation: 123:4 or 123.4 (123 bytes + 4 bits)
+- Hex with bits: 0x1A:3 (0x1A bytes + 3 bits)
+
+**From End of File**
+- Negative offset: -32 (last 32 bits)
+- Negative hex: -0x10 (last 16 bytes)
+- Negative byte+bit: -1024:4 (1024 bytes + 4 bits from end)
 
 ### Options
 
@@ -37,57 +55,52 @@ itty-bitty <FILE> <OFFSET> <BITS> [OPTIONS]
 |--------|-------------|
 | `-e, --order <ORDER>` | Bit order: `msb` (default) or `lsb` |
 | `-f, --format <FORMAT>` | Output: `hex` (default), `decimal`, `binary`, `ascii` |
-| `-v, --verbose` | Show offset info (both from start and from end) |
+| `-v, --verbose` | Show detailed offset information |
 
 ## Examples
 
-Read the first byte of a file:
+### Basic Usage
 ```bash
+# Read first byte
 itty-bitty myfile.bin 0 8
-# 0x42
-```
-
-Read 48 bits starting at bit offset 32:
-```bash
+# Read 48 bits starting at bit offset 32
 itty-bitty archive.bz2 32 48
 # 0x314159265359  (that's π!)
 ```
 
-Read 3 bits at a non-byte-aligned offset:
+### Hex Offsets
 ```bash
-itty-bitty data.bin 5 3 -f decimal
-# Returns value 0-7
+# Hex with 0x prefix
+itty-bitty data.bin 0x1A 8
+# Hex with $ prefix
+itty-bitty data.bin $1A 8
+# Hex with h suffix
+itty-bitty data.bin 1Ah 8
 ```
 
-Read the last 32 bits of a file (gzip stores original size here):
+### Byte + Bit Offsets
 ```bash
-itty-bitty README.md.gz -32 32 -e lsb -f decimal
-# 329
+# 123 bytes + 4 bits
+itty-bitty file.bin 123:4 8
+# Hex with bits
+itty-bitty file.bin 0x1A.3 5
 ```
 
-Use verbose mode to see both positive and negative offsets:
+### From End of File
 ```bash
-itty-bitty archive.bz2 2130 48 -v
-# File: 277 bytes (2216 bits)
-# Reading 48 bits at offset 2130 (byte 266, +2 bits) = -86 from end
-# 0x177245385090
+# Last 32 bits
+itty-bitty file.bin -32 32
+# Last 0x100 bytes + 3 bits
+itty-bitty file.bin -0x100:3 5
 ```
 
-## Fun Fact: Finding π in bzip2 Files
-
-bzip2 uses the digits of π (3.14159265359) and √π (1.77245385090) as 48-bit magic markers:
-
+### Verbose Mode
 ```bash
-# Block header marker (π)
-itty-bitty README.md.bz2 32 48
-# 0x314159265359
-
-# End-of-stream marker (√π) — often at an unaligned bit offset!
-itty-bitty README.md.bz2 -86 48
-# 0x177245385090
+itty-bitty archive.bz2 0x200.3 16 -v
+# File: 1024 bytes (8192 bits)
+# Reading 16 bits at offset 4099 (0x1000 bytes, 3 bits) = -4093 from end
+# 0xABCD
 ```
-
-The tests include a bit-scanner that finds these markers at arbitrary bit positions.
 
 ## Implementation
 
