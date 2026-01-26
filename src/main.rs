@@ -51,20 +51,20 @@ impl FromStr for Offset {
         // Remove thousands separators
         let s = s.replace(&[',', '_', '\''][..], "");
         
-        // Try to split into bytes.bits or bytes:bits
-        let (num_str, bits) = if let Some((a, b)) = s.split_once(|c| c == ':' || c == '.') {
+        // Try to split into bytes:bits (or bytes.bits)
+        let (num_str, bits_part) = if let Some((a, b)) = s.split_once(|c| c == ':' || c == '.') {
             let bits = b.parse::<u32>()
                 .map_err(|_| OffsetError::ParseError("Invalid bit count".into()))?;
             if bits > 7 {
                 return Err(OffsetError::InvalidBitOffset);
             }
-            (a, bits)
+            (a, Some(bits))
         } else {
-            (s.as_str(), 0)
+            (s.as_str(), None)
         };
         
-        // Parse the number part (in bits)
-        let total_bits = if num_str.starts_with("0x") || num_str.starts_with("0X") {
+        // Parse the number part
+        let num = if num_str.starts_with("0x") || num_str.starts_with("0X") {
             u64::from_str_radix(&num_str[2..], 16)
         } else if num_str.starts_with('$') {
             u64::from_str_radix(&num_str[1..], 16)
@@ -74,12 +74,12 @@ impl FromStr for Offset {
             num_str.parse::<u64>()
         }.map_err(|e| OffsetError::ParseError(e.to_string()))?;
         
-        // If no bits were specified via colon/dot, treat the number as bits
-        // If bits were specified, treat the number as bytes
-        let (bytes, bits) = if bits == 0 {
-            (total_bits / 8, (total_bits % 8) as u32)
+        // If bits were specified via colon/dot, treat num as bytes
+        // Otherwise, treat num as total bits
+        let (bytes, bits) = if let Some(bit_offset) = bits_part {
+            (num, bit_offset)
         } else {
-            (total_bits, bits)
+            (num / 8, (num % 8) as u32)
         };
         
         Ok(Offset {
