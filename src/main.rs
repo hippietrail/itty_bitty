@@ -216,9 +216,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             file_bits
         );
         eprintln!(
-            "Reading {} bits at offset {} ({} bytes, {} bits) = -{} from end",
+            "Reading {} bits at offset {} ({:#x}) = ({} bytes, {} bits) = ({:#x}:{} bits) from end = -{}",
             args.bits,
             offset,
+            offset,
+            args.offset.bytes,
+            args.offset.bits,
             args.offset.bytes,
             args.offset.bits,
             from_end
