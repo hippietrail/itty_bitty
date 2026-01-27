@@ -25,6 +25,63 @@ fn parse_offset(s: &str) -> Result<Offset, String> {
     Offset::from_str(s).map_err(|e| e.to_string())
 }
 
+fn parse_length(s: &str) -> Result<Length, String> {
+    Length::from_str(s).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone)]
+struct Length {
+    bits: u64,
+}
+
+impl Length {
+    fn to_bits(&self) -> u64 {
+        self.bits
+    }
+}
+
+impl FromStr for Length {
+    type Err = OffsetError;
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.replace(&[',', '_', '\''][..], "");
+        
+        // Try to split into bytes:bits
+        let (num_str, bits_part) = if let Some((a, b)) = s.split_once(|c| c == ':' || c == '.') {
+            let bits = b.parse::<u64>()
+                .map_err(|_| OffsetError::ParseError("Invalid bit count".into()))?;
+            if bits > 7 {
+                return Err(OffsetError::InvalidBitOffset);
+            }
+            (a, Some(bits))
+        } else {
+            (s.as_str(), None)
+        };
+        
+        // Parse the number part
+        let num = if num_str.starts_with("0x") || num_str.starts_with("0X") {
+            u64::from_str_radix(&num_str[2..], 16)
+        } else if num_str.starts_with('$') {
+            u64::from_str_radix(&num_str[1..], 16)
+        } else if num_str.ends_with('h') || num_str.ends_with('H') {
+            u64::from_str_radix(&num_str[..num_str.len()-1], 16)
+        } else {
+            num_str.parse::<u64>()
+        }.map_err(|e| OffsetError::ParseError(e.to_string()))?;
+        
+        // If bits specified, num is bytes; otherwise num is total bits
+        let total_bits = if let Some(bit_offset) = bits_part {
+            (num * 8) + bit_offset
+        } else {
+            num
+        };
+        
+        Ok(Length {
+            bits: total_bits,
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 struct Offset {
     bytes: u64,
@@ -109,8 +166,10 @@ struct Args {
     #[arg(value_parser = parse_offset)]
     offset: Offset,
 
-    /// Number of bits to read
-    bits: usize,
+    /// Number of bits to read (e.g., '32', '0x20', '4:0' for 4 bytes)
+    /// Supports hex (0x, $, or h suffix), thousands separators, and bytes:bits syntax
+    #[arg(value_parser = parse_length)]
+    length: Length,
 
     /// Bit order (msb = most significant bit first, lsb = least significant bit first)
     #[arg(short = 'e', long, value_enum, default_value = "msb")]
@@ -169,7 +228,8 @@ fn extract_bits_to_biguint_lsb(bits: &BitSlice<u8, Lsb0>) -> BigUint {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    if args.bits == 0 {
+    let bits = args.length.to_bits();
+    if bits == 0 {
         return Err("Must read at least 1 bit".into());
     }
 
@@ -196,7 +256,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         total_bits as usize
     };
 
-    let end_bit = offset + args.bits;
+    let end_bit = offset + bits as usize;
     if end_bit > file_bits {
         let excess_bits = end_bit - file_bits;
         return Err(format!(
@@ -218,7 +278,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         eprintln!(
             "Reading {} bits at offset {} ({:#x}) = ({} bytes, {} bits) = ({:#x}:{} bits) from end = -{}",
-            args.bits,
+            bits,
             offset,
             offset,
             args.offset.bytes,
