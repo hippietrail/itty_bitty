@@ -20,8 +20,11 @@ cargo install --path .
 ## Usage
 
 ```
-itty-bitty <FILE> <OFFSET> <BITS> [OPTIONS]
+itty-bitty [OPTIONS] <OFFSET> <LENGTH> <FILE>
+itty-bitty [OPTIONS] <FILE> <OFFSET> <LENGTH>
 ```
+
+Both orderings are supported — choose what's convenient. Options must come first.
 
 ### Arguments
 
@@ -29,7 +32,7 @@ itty-bitty <FILE> <OFFSET> <BITS> [OPTIONS]
 |----------|-------------|
 | `FILE` | Input file path |
 | `OFFSET` | Bit/byte offset with optional bits (see below) |
-| `BITS` | Number of bits to read |
+| `LENGTH` | Number of bits to read |
 
 ### Offset Syntax
 
@@ -66,6 +69,16 @@ itty-bitty myfile.bin 0 8
 # Read 48 bits starting at bit offset 32
 itty-bitty archive.bz2 32 48
 # 0x314159265359  (that's π!)
+```
+
+### Flexible Argument Ordering
+```bash
+# Same command, two ways:
+itty-bitty file.bin 100 64         # FILE OFFSET LENGTH
+itty-bitty 100 64 file.bin         # OFFSET LENGTH FILE
+
+# The second form makes it easy to test multiple files without retyping:
+for f in *.bin; do itty-bitty 100 64 "$f"; done
 ```
 
 ### Hex Offsets

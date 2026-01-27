@@ -250,19 +250,10 @@ enum BitOrder {
 #[command(about = "Read an arbitrary-sized bitfield from a file at any bit offset")]
 #[command(arg_required_else_help = true)]
 struct Args {
-    /// Input file path
-    file: String,
-
-    /// Bit/byte offset with optional bits (e.g., '123', '0x1A:3', '1_000.5')
-    /// Supports hex (0x, $, or h suffix) and thousands separators (_, ',', ' ')
-    /// Negative values count from end of file
-    #[arg(value_parser = parse_offset)]
-    offset: Offset,
-
-    /// Number of bits to read (e.g., '32', '0x20', '4:0' for 4 bytes)
-    /// Supports hex (0x, $, or h suffix), thousands separators, and bytes:bits syntax
-    #[arg(value_parser = parse_length)]
-    length: Length,
+    /// Positional arguments: [OFFSET LENGTH FILE] or [FILE OFFSET LENGTH]
+    /// Supports both orderings for flexible command-line use. Options must come first.
+    #[arg(trailing_var_arg = true)]
+    positional: Vec<String>,
 
     /// Bit order (msb = most significant bit first, lsb = least significant bit first)
     #[arg(short = 'e', long, value_enum, default_value = "msb")]
@@ -275,6 +266,57 @@ struct Args {
     /// Show offset info (both from start and from end)
     #[arg(short = 'v', long)]
     verbose: bool,
+}
+
+impl Args {
+    fn parse_positional(self) -> Result<(String, Offset, Length), Box<dyn std::error::Error>> {
+        if self.positional.len() < 3 {
+            return Err("Expected FILE, OFFSET, and LENGTH arguments".into());
+        }
+
+        // Try to detect order by checking if first arg is a valid file
+        // Then try offset/length parsing
+        let file: String;
+        let offset: Offset;
+        let length: Length;
+
+        // Strategy: check if first arg could be offset/length
+        let first_is_offset = {
+            if let Ok(_) = Offset::from_str(&self.positional[0]) {
+                if let Ok(_len) = Length::from_str(&self.positional[1]) {
+                    true  // First two look like offset/length
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        };
+
+        if first_is_offset {
+            // OFFSET LENGTH FILE order
+            if self.positional.len() < 3 {
+                return Err("Expected OFFSET LENGTH FILE or FILE OFFSET LENGTH".into());
+            }
+            offset = Offset::from_str(&self.positional[0])
+                .map_err(|e| format!("Invalid offset: {}", e))?;
+            length = Length::from_str(&self.positional[1])
+                .map_err(|e| format!("Invalid length: {}", e))?;
+            file = self.positional[2].clone();
+        } else {
+            // FILE OFFSET LENGTH order
+            if self.positional.len() < 3 {
+                return Err("Expected FILE OFFSET LENGTH or OFFSET LENGTH FILE".into());
+            }
+            file = self.positional[0].clone();
+            offset = Offset::from_str(&self.positional[1])
+                .map_err(|e| format!("Invalid offset: {}", e))?;
+            length = Length::from_str(&self.positional[2])
+                .map_err(|e| format!("Invalid length: {}", e))?;
+        }
+
+        Ok((file, offset, length))
+    }
 }
 
 #[derive(Clone, ValueEnum)]
@@ -320,22 +362,26 @@ fn extract_bits_to_biguint_lsb(bits: &BitSlice<u8, Lsb0>) -> BigUint {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+    let order = args.order.clone();
+    let format = args.format.clone();
+    let verbose = args.verbose;
+    let (file, offset, length) = args.parse_positional()?;
 
-    let bits = args.length.to_bits();
+    let bits = length.to_bits();
     if bits == 0 {
         return Err("Must read at least 1 bit".into());
     }
 
-    let file = File::open(&args.file)?;
+    let file = File::open(&file)?;
     let mmap = unsafe { MmapOptions::new().map(&file)? };
 
     let file_bits = mmap.len() * 8;
 
     // Calculate total bits from offset
-    let total_bits = args.offset.to_bits();
+    let total_bits = offset.to_bits();
     
     // Resolve negative offset (relative to end of file)
-    let offset: usize = if total_bits < 0 {
+    let offset_bits: usize = if total_bits < 0 {
         let from_end = (-total_bits) as usize;
         if from_end > file_bits {
             return Err(format!(
@@ -349,7 +395,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         total_bits as usize
     };
 
-    let end_bit = offset + bits as usize;
+    let end_bit = offset_bits + bits as usize;
     if end_bit > file_bits {
         let excess_bits = end_bit - file_bits;
         return Err(format!(
@@ -362,8 +408,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .into());
     }
 
-    if args.verbose {
-        let from_end = file_bits - offset;
+    if verbose {
+        let from_end = file_bits - offset_bits;
         eprintln!(
             "File: {} bytes ({} bits)",
             mmap.len(),
@@ -372,31 +418,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!(
             "Reading {} bits at offset {} ({:#x}) = ({} bytes, {} bits) = ({:#x}:{} bits) from end = -{}",
             bits,
-            offset,
-            offset,
-            args.offset.bytes,
-            args.offset.bits,
-            args.offset.bytes,
-            args.offset.bits,
+            offset_bits,
+            offset_bits,
+            offset.bytes,
+            offset.bits,
+            offset.bytes,
+            offset.bits,
             from_end
         );
     }
 
-    let value: BigUint = match args.order {
+    let value: BigUint = match order {
         BitOrder::Msb => {
             let bits: &BitSlice<u8, Msb0> = BitSlice::from_slice(&mmap[..]);
-            extract_bits_to_biguint(&bits[offset..end_bit])
+            extract_bits_to_biguint(&bits[offset_bits..end_bit])
         }
         BitOrder::Lsb => {
             let bits: &BitSlice<u8, Lsb0> = BitSlice::from_slice(&mmap[..]);
-            extract_bits_to_biguint_lsb(&bits[offset..end_bit])
+            extract_bits_to_biguint_lsb(&bits[offset_bits..end_bit])
         }
     };
 
     // For text formats, pad bytes to match the requested bit length
     let num_bytes = (bits as usize + 7) / 8;
 
-    match args.format {
+    match format {
         OutputFormat::Decimal => println!("{}", value),
         OutputFormat::Hex => println!("{:#x}", value),
         OutputFormat::Binary => println!("{:#b}", value),
@@ -419,14 +465,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let term_width = get_terminal_width().unwrap_or(80) as u16;
             
             // Calculate hex digits needed for maximum offset
-            let max_offset_bits = offset + bytes.len() * 8;
+            let max_offset_bits = offset_bits + bytes.len() * 8;
             let max_offset_bytes = max_offset_bits / 8;
             let offset_hex_width = format!("{:x}", max_offset_bytes).len();
             
             // Recalculate with real offset width
             let width = best_fit_width(term_width, offset_hex_width as u16);
             
-            print_hex_ascii(&bytes, offset as u64, width as usize, offset_hex_width);
+            print_hex_ascii(&bytes, offset_bits as u64, width as usize, offset_hex_width);
         }
     }
 
