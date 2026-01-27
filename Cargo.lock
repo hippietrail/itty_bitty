@@ -140,6 +140,7 @@ version = "0.1.0"
 dependencies = [
  "bitvec",
  "clap",
+ "libc",
  "memmap2",
  "num-bigint",
  "thiserror",
