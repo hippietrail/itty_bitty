@@ -324,29 +324,32 @@ fn print_ascii(bytes: &[u8]) {
 }
 
 fn print_hex_ascii(bytes: &[u8]) {
-    // Print hex bytes
-    for &b in bytes {
-        print!("{:02x} ", b);
-    }
-    
-    // Padding if less than 16 bytes
-    if bytes.len() < 16 {
-        for _ in bytes.len()..16 {
-            print!("   ");
+    // Print 16 bytes per line (hexdump style)
+    for chunk in bytes.chunks(16) {
+        // Print hex bytes
+        for &b in chunk {
+            print!("{:02x} ", b);
         }
-    }
-    
-    // Separator
-    print!(" | ");
-    
-    // Print ASCII
-    for &b in bytes {
-        if b.is_ascii_graphic() || b == b' ' {
-            print!("{}", b as char);
-        } else {
-            // ANSI: red background for non-printable
-            print!("\x1b[41m \x1b[0m");
+        
+        // Padding to align ASCII column
+        if chunk.len() < 16 {
+            for _ in chunk.len()..16 {
+                print!("   ");
+            }
         }
+        
+        // Separator
+        print!(" | ");
+        
+        // Print ASCII
+        for &b in chunk {
+            if b.is_ascii_graphic() || b == b' ' {
+                print!("{}", b as char);
+            } else {
+                // ANSI: red background for non-printable
+                print!("\x1b[41m \x1b[0m");
+            }
+        }
+        println!();
     }
-    println!();
 }
