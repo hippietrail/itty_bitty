@@ -300,12 +300,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    // For text formats, pad bytes to match the requested bit length
+    let num_bytes = (bits as usize + 7) / 8;
+
     match args.format {
         OutputFormat::Decimal => println!("{}", value),
         OutputFormat::Hex => println!("{:#x}", value),
         OutputFormat::Binary => println!("{:#b}", value),
-        OutputFormat::Ascii => print_ascii(&value.to_bytes_be()),
-        OutputFormat::HexAscii => print_hex_ascii(&value.to_bytes_be()),
+        OutputFormat::Ascii => {
+            let mut bytes = value.to_bytes_be();
+            // Pad with leading zeros if needed
+            while bytes.len() < num_bytes {
+                bytes.insert(0, 0);
+            }
+            print_ascii(&bytes);
+        }
+        OutputFormat::HexAscii => {
+            let mut bytes = value.to_bytes_be();
+            // Pad with leading zeros if needed
+            while bytes.len() < num_bytes {
+                bytes.insert(0, 0);
+            }
+            print_hex_ascii(&bytes);
+        }
     }
 
     Ok(())
