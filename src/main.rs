@@ -131,6 +131,7 @@ enum OutputFormat {
     Hex,
     Binary,
     Ascii,
+    HexAscii,
 }
 
 fn extract_bits_to_biguint(bits: &BitSlice<u8, Msb0>) -> BigUint {
@@ -244,12 +245,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         OutputFormat::Hex => println!("{:#x}", value),
         OutputFormat::Binary => println!("{:#b}", value),
         OutputFormat::Ascii => print_ascii(&value.to_bytes_be()),
+        OutputFormat::HexAscii => print_hex_ascii(&value.to_bytes_be()),
     }
 
     Ok(())
 }
 
 fn print_ascii(bytes: &[u8]) {
+    for &b in bytes {
+        if b.is_ascii_graphic() || b == b' ' {
+            print!("{}", b as char);
+        } else {
+            // ANSI: red background for non-printable
+            print!("\x1b[41m \x1b[0m");
+        }
+    }
+    println!();
+}
+
+fn print_hex_ascii(bytes: &[u8]) {
+    // Print hex bytes
+    for &b in bytes {
+        print!("{:02x} ", b);
+    }
+    
+    // Padding if less than 16 bytes
+    if bytes.len() < 16 {
+        for _ in bytes.len()..16 {
+            print!("   ");
+        }
+    }
+    
+    // Separator
+    print!(" | ");
+    
+    // Print ASCII
     for &b in bytes {
         if b.is_ascii_graphic() || b == b' ' {
             print!("{}", b as char);
