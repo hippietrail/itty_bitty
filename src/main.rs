@@ -466,7 +466,7 @@ fn print_hex_ascii(bytes: &[u8], start_offset: u64, width: usize, offset_width: 
         }
         
         // Separator
-        print!(" | ");
+        print!("| ");
         
         // Print ASCII
         for &b in chunk {
