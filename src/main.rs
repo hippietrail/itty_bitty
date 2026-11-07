@@ -97,6 +97,24 @@ fn best_fit_width(term_width: u16, offset_width: u16) -> u16 {
     8 // minimum fallback
 }
 
+fn best_fit_width_interleaved(term_width: u16, offset_width: u16) -> u16 {
+    // Available space = terminal width - offset field (offset_width + ": ")
+    // Each byte takes 3 characters: "XX " in hex line, " X " / "   " / "\x1b[41m  \x1b[0m " in ascii line
+    let overhead = offset_width + 2;
+    let available = if term_width > overhead {
+        (term_width - overhead) / 3
+    } else {
+        8
+    } as u16;
+
+    for width in [64, 48, 32, 24, 16, 12, 8].iter() {
+        if *width <= available && is_power_of_two_or_sum(*width) {
+            return *width;
+        }
+    }
+    8
+}
+
 #[derive(Debug)]
 enum OffsetError {
     ParseError(String),
@@ -336,6 +354,8 @@ enum OutputFormat {
     Ascii,
     #[clap(name = "hex-ascii")]
     HexAscii,
+    #[clap(name = "interleaved", alias = "hex-ascii-interleaved")]
+    Interleaved,
 }
 
 fn extract_bits_to_biguint(bits: &BitSlice<u8, Msb0>) -> BigUint {
@@ -484,6 +504,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             
             print_hex_ascii(&bytes, offset_bits as u64, width as usize, offset_hex_width);
         }
+        OutputFormat::Interleaved => {
+            let mut bytes = value.to_bytes_be();
+            // Pad with leading zeros if needed
+            while bytes.len() < num_bytes {
+                bytes.insert(0, 0);
+            }
+
+            // Determine width and calculate offset field width
+            let term_width = get_terminal_width().unwrap_or(80) as u16;
+
+            // Calculate hex digits needed for maximum offset
+            let max_offset_bits = offset_bits + bytes.len() * 8;
+            let max_offset_bytes = max_offset_bits / 8;
+            let offset_hex_width = format!("{:x}", max_offset_bytes).len();
+
+            // Recalculate with real offset width
+            let width = best_fit_width_interleaved(term_width, offset_hex_width as u16);
+
+            print_interleaved(&bytes, offset_bits as u64, width as usize, offset_hex_width);
+        }
     }
 
     Ok(())
@@ -531,6 +571,35 @@ fn print_hex_ascii(bytes: &[u8], start_offset: u64, width: usize, offset_width: 
             } else {
                 // ANSI: red background for non-printable
                 print!("\x1b[41m \x1b[0m");
+            }
+        }
+        println!();
+    }
+}
+
+fn print_interleaved(bytes: &[u8], start_offset: u64, width: usize, offset_width: usize) {
+    for (i, chunk) in bytes.chunks(width).enumerate() {
+        let chunk_offset = start_offset + (i * width) as u64;
+
+        // Line 1: Offset and hex bytes
+        print!("{:0width$x}: ", chunk_offset, width = offset_width);
+        for &b in chunk {
+            print!("{:02x} ", b);
+        }
+        println!();
+
+        // Line 2: Indentation and ASCII / red square
+        print!("{:width$}  ", "", width = offset_width);
+        for &b in chunk {
+            if b.is_ascii_graphic() {
+                // Printable graphic character centered in 3-char slot
+                print!(" {} ", b as char);
+            } else if b == b' ' {
+                // Space: 3 spaces
+                print!("   ");
+            } else {
+                // Non-printable: 2-character red square matching hex digits + 1 space
+                print!("\x1b[41m  \x1b[0m ");
             }
         }
         println!();

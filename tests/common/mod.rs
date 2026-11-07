@@ -145,6 +145,52 @@ pub fn create_tar_xz() -> Option<PathBuf> {
     }
 }
 
+pub fn create_llvm_bc() -> Option<PathBuf> {
+    if !has_command("clang") {
+        println!("⏭ clang not found, skipping dynamic LLVM test");
+        return None;
+    }
+    let dir = test_dir();
+    let c_file = dir.join("test.c");
+    let bc_file = dir.join("test.bc");
+    fs::write(&c_file, "int add(int a, int b) { return a + b; }\n").ok()?;
+    let status = Command::new("clang")
+        .arg("-x").arg("c")
+        .arg("-c")
+        .arg("-emit-llvm")
+        .arg(&c_file)
+        .arg("-o")
+        .arg(&bc_file)
+        .status()
+        .ok()?;
+    if status.success() && bc_file.exists() {
+        println!("✓ clang found, created bitcode");
+        Some(bc_file)
+    } else {
+        println!("⏭ clang failed to emit bitcode, skipping");
+        None
+    }
+}
+
+pub fn create_raw_llvm_bc() -> PathBuf {
+    let dir = test_dir();
+    let bc_file = dir.join("raw.bc");
+    // Standard raw LLVM bitcode stream header:
+    // Magic: 'B', 'C', 0xC0, 0xDE (32 bits)
+    // ENTER_SUBBLOCK record code = 1 (2 bits)
+    // Block ID = 13 (VBR8: 7 bits data + 1 continuation bit = 8 bits: 13)
+    // New abbrev width = 5 (VBR4: 3 bits data + 1 continuation bit = 4 bits: 5)
+    // 32-bit alignment padding (18 bits of zeros)
+    // Block length in 32-bit words = 7 (32 bits)
+    let bytes: [u8; 12] = [
+        0x42, 0x43, 0xc0, 0xde,
+        0x35, 0x14, 0x00, 0x00,
+        0x07, 0x00, 0x00, 0x00,
+    ];
+    fs::write(&bc_file, &bytes).expect("Failed to write raw.bc");
+    bc_file
+}
+
 pub fn read_bits(file: &str, offset: i64, bits: usize, format: &str) -> String {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_itty-bitty"));
     cmd.arg("-f").arg(format).arg(file);
@@ -178,4 +224,15 @@ pub fn read_bits_decimal_lsb(file: &str, offset: i64, bits: usize) -> u64 {
         .trim()
         .parse()
         .unwrap_or(0)
+}
+
+pub fn read_bits_with_order(file: &str, order: &str, format: &str, offset: i64, bits: usize) -> String {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_itty-bitty"));
+    cmd.arg("-e").arg(order).arg("-f").arg(format).arg(file);
+    if offset < 0 {
+        cmd.arg("--");
+    }
+    cmd.arg(offset.to_string()).arg(bits.to_string());
+    let output = cmd.output().expect("Failed to run itty-bitty");
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
