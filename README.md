@@ -9,7 +9,7 @@ A CLI tool for reading arbitrary-sized bitfields from files at any bit offset.
 - **Bit-level precision** — specify exact bit offsets, not just bytes
 - **Flexible offset syntax** — hex, decimal, byte+bit, negative offsets
 - **MSB/LSB ordering** — supports both bit orderings
-- **Multiple output formats** — hex (default), decimal, binary, ASCII, hex-ascii (hexdump-style)
+- **Multiple output formats** — hex (default), decimal, binary, ASCII, hex-ascii, interleaved (2-line hex/ASCII)
 
 ## Installation
 
@@ -73,8 +73,10 @@ The `OFFSET` argument supports several flexible formats:
 | Option | Description |
 |--------|-------------|
 | `-e, --order <ORDER>` | Bit order: `msb` (default) or `lsb` |
-| `-f, --format <FORMAT>` | Output: `hex` (default), `decimal`, `binary`, `ascii`, `hex-ascii` |
+| `-f, --format <FORMAT>` | Output: `hex` (default), `decimal`, `binary`, `ascii`, `hex-ascii`, `interleaved` |
 | `-v, --verbose` | Show detailed offset information |
+
+> **Note on Endianness:** `itty-bitty` currently controls bit stream ordering (`-e msb` or `-e lsb`) across the entire requested range rather than byte-oriented word/dword/qword endianness. However, you can achieve a similar result when reading 16-bit, 32-bit, or 64-bit little-endian integers on byte boundaries by using `-e lsb`, because it evaluates bits starting from bit 0 of the first byte up to bit 7 of the last byte (`byte[0] | (byte[1] << 8) | ...`).
 
 ### Output Formats
 
@@ -85,11 +87,18 @@ The `OFFSET` argument supports several flexible formats:
 | `binary` | Single line binary | `0b11000000110001...` |
 | `ascii` | Single line ASCII (non-printable shown as red blocks) | `MZqFpD='<red block>` |
 | `hex-ascii` | Hexdump-style: offset + hex + ASCII (one line per row) | See example below |
+| `interleaved` | 2-line interleaved: hex line on top, ASCII/red block below | See example below |
 
 **hex-ascii example:**
 ```
 00: 4d 5a 71 46 70 44 3d 27 0a 00 00 10 00 f8 00 00 00 00 00 00 00 01 00 08 40 00 00 00 00 00 00 00 | MZqFpD='                @
 10: 2c 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 | ,                               |
+```
+
+**interleaved example:**
+```
+00: 42 43 c0 de 35 14 00 00 48 65 6c 6c 6f 20 21 0a 
+     B  C        5           H  e  l  l  o     !    
 ```
 
 ## Examples
@@ -156,6 +165,24 @@ itty-bitty -f hex-ascii myfile.bin 0 256
 
 # View end of file
 itty-bitty -f hex-ascii myfile.bin -256 256
+```
+
+### Interleaved Mode (2-line Hex/ASCII)
+```bash
+# View file in 2-line interleaved format (hex with ASCII aligned directly underneath)
+itty-bitty -f interleaved myfile.bin 0 128
+# 00: 42 43 c0 de 35 14 00 00 48 65 6c 6c 6f 20 21 0a 
+#      B  C        5           H  e  l  l  o     !    
+```
+
+### Little-Endian Integers (Word / Dword / Qword)
+While byte-oriented word/dword/qword endianness is not yet a separate option, using `-e lsb` evaluates multi-byte integers on byte boundaries in little-endian order:
+```bash
+# Read a 32-bit little-endian integer (dword) in decimal
+itty-bitty -e lsb -f decimal myfile.bin 0 32
+
+# Read a 16-bit little-endian integer (word) in hex
+itty-bitty -e lsb -f hex myfile.bin 0 16
 ```
 
 ## Implementation
