@@ -165,7 +165,6 @@ Built with:
 - [`bitvec`](https://docs.rs/bitvec) — bit-level slice operations
 - [`num-bigint`](https://docs.rs/num-bigint) — arbitrary-precision integers
 - [`clap`](https://docs.rs/clap) — CLI argument parsing
-- [Amp Free](https://ampcode.com/news/amp-free) — free AI coding agent support by ads
 
 ## License
 
