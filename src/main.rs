@@ -114,10 +114,12 @@ impl std::fmt::Display for OffsetError {
 
 impl std::error::Error for OffsetError {}
 
+#[allow(dead_code)]
 fn parse_offset(s: &str) -> Result<Offset, String> {
     Offset::from_str(s).map_err(|e| e.to_string())
 }
 
+#[allow(dead_code)]
 fn parse_length(s: &str) -> Result<Length, String> {
     Length::from_str(s).map_err(|e| e.to_string())
 }
@@ -248,11 +250,11 @@ enum BitOrder {
 
 #[derive(Parser)]
 #[command(about = "Read an arbitrary-sized bitfield from a file at any bit offset")]
+#[command(override_usage = "itty-bitty [OPTIONS] <OFFSET> <LENGTH> <FILE>\n    itty-bitty [OPTIONS] <FILE> <OFFSET> <LENGTH>")]
 #[command(arg_required_else_help = true)]
 struct Args {
     /// Positional arguments: [OFFSET LENGTH FILE] or [FILE OFFSET LENGTH]
-    /// Supports both orderings for flexible command-line use. Options must come first.
-    #[arg(trailing_var_arg = true)]
+    #[arg(trailing_var_arg = true, hide = true)]
     positional: Vec<String>,
 
     /// Bit order (msb = most significant bit first, lsb = least significant bit first)
@@ -270,7 +272,10 @@ struct Args {
 
 impl Args {
     fn parse_positional(self) -> Result<(String, Offset, Length), Box<dyn std::error::Error>> {
-        if self.positional.len() < 3 {
+        // Strip out any standalone "--" delimiter passed between arguments (e.g. before negative offsets)
+        // because clap trailing_var_arg includes "--" in positional values when placed after positional args.
+        let positional: Vec<String> = self.positional.into_iter().filter(|s| s != "--").collect();
+        if positional.len() < 3 {
             return Err("Expected FILE, OFFSET, and LENGTH arguments".into());
         }
 
@@ -282,8 +287,8 @@ impl Args {
 
         // Strategy: check if first arg could be offset/length
         let first_is_offset = {
-            if let Ok(_) = Offset::from_str(&self.positional[0]) {
-                if let Ok(_len) = Length::from_str(&self.positional[1]) {
+            if let Ok(_) = Offset::from_str(&positional[0]) {
+                if let Ok(_len) = Length::from_str(&positional[1]) {
                     true  // First two look like offset/length
                 } else {
                     false
@@ -295,23 +300,23 @@ impl Args {
 
         if first_is_offset {
             // OFFSET LENGTH FILE order
-            if self.positional.len() < 3 {
+            if positional.len() < 3 {
                 return Err("Expected OFFSET LENGTH FILE or FILE OFFSET LENGTH".into());
             }
-            offset = Offset::from_str(&self.positional[0])
+            offset = Offset::from_str(&positional[0])
                 .map_err(|e| format!("Invalid offset: {}", e))?;
-            length = Length::from_str(&self.positional[1])
+            length = Length::from_str(&positional[1])
                 .map_err(|e| format!("Invalid length: {}", e))?;
-            file = self.positional[2].clone();
+            file = positional[2].clone();
         } else {
             // FILE OFFSET LENGTH order
-            if self.positional.len() < 3 {
+            if positional.len() < 3 {
                 return Err("Expected FILE OFFSET LENGTH or OFFSET LENGTH FILE".into());
             }
-            file = self.positional[0].clone();
-            offset = Offset::from_str(&self.positional[1])
+            file = positional[0].clone();
+            offset = Offset::from_str(&positional[1])
                 .map_err(|e| format!("Invalid offset: {}", e))?;
-            length = Length::from_str(&self.positional[2])
+            length = Length::from_str(&positional[2])
                 .map_err(|e| format!("Invalid length: {}", e))?;
         }
 
@@ -321,10 +326,15 @@ impl Args {
 
 #[derive(Clone, ValueEnum)]
 enum OutputFormat {
+    #[clap(name = "decimal")]
     Decimal,
+    #[clap(name = "hex")]
     Hex,
+    #[clap(name = "binary")]
     Binary,
+    #[clap(name = "ascii")]
     Ascii,
+    #[clap(name = "hex-ascii")]
     HexAscii,
 }
 
