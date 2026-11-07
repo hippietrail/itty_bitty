@@ -24,6 +24,8 @@ fn test_gzip_isize() {
     let Some(path) = create_gzip() else { return };
     let path_str = path.to_str().unwrap();
 
+    // Note: ISIZE is the last 32 bits of the gzip trailer (offset -32 bits).
+    // Uses negative offset counting backwards from EOF.
     let isize = read_bits_decimal_lsb(path_str, -32, 32);
     let original_size = readme_content().len() as u64;
 

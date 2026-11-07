@@ -7,6 +7,3 @@
 *.swp
 *.swo
 .DS_Store
-
-# Beads issue tracker
-.beads/
