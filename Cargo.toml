@@ -11,7 +11,7 @@ categories = ["command-line-utilities", "parsing"]
 [dependencies]
 bitvec = "1.0.1"
 clap = { version = "4.5.54", features = ["derive"] }
+libc = "0.2"
 memmap2 = "0.9.9"
 num-bigint = "0.4.6"
-thiserror = "1.0.61"
-libc = "0.2"
+# thiserror = "1.0.61"
