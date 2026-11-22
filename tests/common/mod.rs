@@ -155,7 +155,8 @@ pub fn create_llvm_bc() -> Option<PathBuf> {
     let bc_file = dir.join("test.bc");
     fs::write(&c_file, "int add(int a, int b) { return a + b; }\n").ok()?;
     let status = Command::new("clang")
-        .arg("-x").arg("c")
+        .arg("-x")
+        .arg("c")
         .arg("-c")
         .arg("-emit-llvm")
         .arg(&c_file)
@@ -183,9 +184,7 @@ pub fn create_raw_llvm_bc() -> PathBuf {
     // 32-bit alignment padding (18 bits of zeros)
     // Block length in 32-bit words = 7 (32 bits)
     let bytes: [u8; 12] = [
-        0x42, 0x43, 0xc0, 0xde,
-        0x35, 0x14, 0x00, 0x00,
-        0x07, 0x00, 0x00, 0x00,
+        0x42, 0x43, 0xc0, 0xde, 0x35, 0x14, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00,
     ];
     fs::write(&bc_file, &bytes).expect("Failed to write raw.bc");
     bc_file
@@ -208,7 +207,9 @@ pub fn read_bits_hex(file: &str, offset: i64, bits: usize) -> String {
 }
 
 pub fn read_bits_decimal(file: &str, offset: i64, bits: usize) -> u64 {
-    read_bits(file, offset, bits, "decimal").parse().unwrap_or(0)
+    read_bits(file, offset, bits, "decimal")
+        .parse()
+        .unwrap_or(0)
 }
 
 pub fn read_bits_decimal_lsb(file: &str, offset: i64, bits: usize) -> u64 {
@@ -226,7 +227,13 @@ pub fn read_bits_decimal_lsb(file: &str, offset: i64, bits: usize) -> u64 {
         .unwrap_or(0)
 }
 
-pub fn read_bits_with_order(file: &str, order: &str, format: &str, offset: i64, bits: usize) -> String {
+pub fn read_bits_with_order(
+    file: &str,
+    order: &str,
+    format: &str,
+    offset: i64,
+    bits: usize,
+) -> String {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_itty-bitty"));
     cmd.arg("-e").arg(order).arg("-f").arg(format).arg(file);
     if offset < 0 {

@@ -31,7 +31,10 @@ fn test_gzip_isize() {
 
     println!("gzip ISIZE (last 32 bits LE): {}", isize);
     println!("Original content size: {}", original_size);
-    assert_eq!(isize, original_size, "gzip ISIZE should match original size");
+    assert_eq!(
+        isize, original_size,
+        "gzip ISIZE should match original size"
+    );
 }
 
 // ============================================================================
