@@ -28,8 +28,9 @@ fn find_48bit_markers(data: &[u8], marker: u64) -> Vec<usize> {
             }
         }
 
-        let value =
-            u64::from_be_bytes([0, 0, bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]]);
+        let value = u64::from_be_bytes([
+            0, 0, bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5],
+        ]);
         if value == marker {
             found.push(bit_offset);
         }
@@ -69,6 +70,9 @@ fn test_find_bzip2_pi_and_sqrt_pi() {
         );
     }
 
-    assert!(!blocks.is_empty(), "Should find at least one π block header");
+    assert!(
+        !blocks.is_empty(),
+        "Should find at least one π block header"
+    );
     assert!(!eos.is_empty(), "Should find √π end-of-stream marker");
 }
